@@ -67,19 +67,19 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --name="StatisticsTool" `
-            --hidden-import=scipy `
-            --hidden-import=statsmodels `
-            --hidden-import=matplotlib `
-            --hidden-import=matplotlib.backends.backend_qt5agg `
-            --hidden-import=pandas `
-            --hidden-import=openpyxl `
-            --hidden-import=numpy `
-            --hidden-import=PyQt5 `
-            --hidden-import=PyQt5.sip `
-            --hidden-import=i18n `
-            --hidden-import=export_results `
-            --noconsole main.py
+          pyinstaller --onefile --name="StatisticsTool" \
+            --hidden-import=scipy \
+            --hidden-import=statsmodels \
+            --hidden-import=matplotlib \
+            --hidden-import=matplotlib.backends.backend_qt5agg \
+            --hidden-import=pandas \
+            --hidden-import=openpyxl \
+            --hidden-import=numpy \
+            --hidden-import=PyQt5 \
+            --hidden-import=PyQt5.sip \
+            --hidden-import=i18n \
+            --hidden-import=export_results \
+            main.py
 
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
