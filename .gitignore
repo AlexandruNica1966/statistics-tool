@@ -10,3 +10,4 @@ dist-usb/
 sample_data.xlsx
 sample_dataset*.txt
 *.pyc
+*.exe
