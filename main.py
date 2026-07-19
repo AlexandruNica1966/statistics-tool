@@ -7,9 +7,17 @@ Bilingual: Romanian / English.
 Author: Agent Gogu (Hermes) — for Alex
 """
 
+import os
 import sys
+
+# ── High-DPI / Retina display support ──────────────────────────────
+# Must be set BEFORE any PyQt5 imports to take effect on Linux/X11.
+os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QPalette, QColor
+from PyQt5.QtCore import Qt
 from main_window import MainWindow
 
 
@@ -63,6 +71,10 @@ def apply_dark_theme(app: QApplication):
 
 
 def main():
+    # Enable high-DPI scaling (must be set before QApplication is created)
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
     app = QApplication(sys.argv)
     app.setApplicationName("Statistical Analysis Tool")
     app.setOrganizationName("AlexTools")
