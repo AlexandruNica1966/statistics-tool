@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statistical Analysis Tool — Two-Dataset Comparison</title>
+<script src="https://cdn.jsdelivr.net/npm/jstat@1.9.6/dist/jstat.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #1e1e1e; --bg2: #252526; --bg3: #2d2d2d; --bg4: #3c3c3c;
+  --fg: #d4d4d4; --accent: #0e639c; --accent-h: #1177bb; --green: #2d6a2d;
+  --green-h: #3a8a3a; --blue: #569cd6; --orange: #ce9178; --yellow: #dcdcaa;
+  --teal: #4ec9b0; --red: #f44747;
+}
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--fg); height: 100vh; display: flex; flex-direction: column; }
+/* Toolbar */
+#toolbar { background: var(--bg3); padding: 8px 12px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--bg4); flex-shrink: 0; flex-wrap: wrap; }
+#toolbar button { border: none; border-radius: 6px; padding: 10px 20px; font-size: 14px; font-weight: bold; cursor: pointer; color: #fff; }
+#toolbar button:hover { filter: brightness(1.15); }
+#btn-run { background: var(--accent); }
+#btn-hyp { background: #5a5a5a; }
+#btn-export { background: var(--green); }
+#btn-export:disabled { background: #444; color: #888; cursor: not-allowed; }
+#toolbar .lang-btns { display: flex; gap: 4px; margin-left: auto; }
+#toolbar .lang-btns button { background: var(--bg4); color: #888; padding: 6px 14px; font-size: 12px; border-radius: 4px; }
+#toolbar .lang-btns button.active { background: var(--accent); color: #fff; }
+#status-label { color: #888; font-size: 13px; margin-left: 8px; }
+/* Main */
+#main { display: flex; flex: 1; overflow: hidden; }
+/* Left panel */
+#left { width: 420px; flex-shrink: 0; border-right: 2px solid var(--bg4); display: flex; flex-direction: column; background: var(--bg); }
+#left .tabs { display: flex; background: var(--bg3); }
+#left .tabs button { flex: 1; padding: 10px; border: none; background: var(--bg3); color: #888; font-size: 13px; font-weight: bold; cursor: pointer; border-bottom: 2px solid transparent; }
+#left .tabs button.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--bg); }
+#left .tabs button:hover { color: var(--fg); }
+.ds-panel { display: none; flex: 1; flex-direction: column; padding: 8px; }
+.ds-panel.active { display: flex; }
+.ds-panel h3 { font-size: 15px; font-weight: bold; color: var(--fg); margin-bottom: 6px; }
+.ds-panel textarea { flex: 1; background: var(--bg2); color: var(--fg); border: 1px solid var(--bg4); border-radius: 4px; padding: 8px; font-family: 'DejaVu Sans Mono', 'Consolas', monospace; font-size: 13px; resize: none; }
+.ds-panel .btns { display: flex; gap: 6px; margin-top: 8px; }
+.ds-panel .btns button { flex: 1; padding: 8px; border: none; border-radius: 4px; background: var(--bg4); color: var(--fg); font-size: 12px; font-weight: bold; cursor: pointer; }
+.ds-panel .btns button:hover { background: #4c4c4c; }
+.ds-panel .count { color: #888; font-size: 12px; margin-top: 4px; }
+/* Resizer */
+#resizer { width: 4px; cursor: col-resize; background: var(--bg4); flex-shrink: 0; }
+#resizer:hover { background: var(--accent); }
+/* Right panel */
+#right { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+#result-tabs { display: flex; background: var(--bg3); flex-shrink: 0; overflow-x: auto; }
+#result-tabs button { padding: 8px 16px; border: none; background: var(--bg3); color: #888; font-size: 12px; font-weight: bold; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+#result-tabs button.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--bg); }
+#result-tabs button:hover { color: var(--fg); }
+#result-content { flex: 1; overflow-y: auto; padding: 12px; }
+/* Tables */
+.stats-table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+.stats-table th, .stats-table td { padding: 6px 10px; border: 1px solid var(--bg4); text-align: center; }
+.stats-table th { background: var(--bg3); color: var(--fg); font-weight: bold; }
+.stats-table td { background: var(--bg2); }
+.stats-table tr:nth-child(even) td { background: #2a2a2b; }
+.section-title { font-size: 14px; font-weight: bold; color: var(--blue); padding: 12px 4px 6px 4px; }
+.commentary { font-size: 12px; color: #888; padding: 6px 8px; background: var(--bg2); border-radius: 4px; border-left: 3px solid var(--blue); margin: 6px 0; line-height: 1.5; }
+.commentary-title { font-size: 13px; font-weight: bold; color: var(--yellow); padding: 8px 4px 2px 4px; }
+.sig { color: var(--teal); font-weight: bold; }
+.not-sig { color: var(--orange); font-weight: bold; }
+.chart-container { width: 100%; margin: 12px 0; }
+.eq { font-size: 13px; color: var(--yellow); padding: 4px; font-family: monospace; }
+/* Status bar */
+#statusbar { background: #007acc; color: #fff; font-size: 12px; padding: 4px 10px; flex-shrink: 0; }
+/* Credit */
+#credit { text-align: right; padding: 4px 12px; font-size: 14px; font-weight: bold; color: #fff; flex-shrink: 0; }
+/* H0 dialog */
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center; }
+.modal.show { display: flex; }
+.modal-content { background: var(--bg); padding: 24px; border-radius: 8px; min-width: 320px; border: 1px solid var(--bg4); }
+.modal-content h3 { margin-bottom: 16px; color: var(--fg); }
+.modal-content label { display: block; margin: 8px 0 4px; font-size: 13px; color: var(--fg); }
+.modal-content input { width: 100%; padding: 8px; background: var(--bg2); color: var(--fg); border: 1px solid var(--bg4); border-radius: 4px; font-size: 13px; }
+.modal-btns { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+.modal-btns button { padding: 8px 20px; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; }
+.modal-btns .ok { background: var(--accent); color: #fff; }
+.modal-btns .cancel { background: var(--bg4); color: var(--fg); }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="btn-run" onclick="runAnalysis()">▶ Run Analysis</button>
+  <button id="btn-hyp" onclick="showHypDialog()">🎯 Set H₀ Means</button>
+  <button id="btn-export" onclick="exportResults()" disabled>📥 Export</button>
+  <span id="status-label">Enter data in both datasets, then click Analyze</span>
+  <div class="lang-btns">
+    <button id="btn-en" class="active" onclick="setLang('en')">EN</button>
+    <button id="btn-ro" onclick="setLang('ro')">RO</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="left">
+    <div class="tabs">
+      <button id="tab-ds1" class="active" onclick="switchDsTab(1)">Dataset 1</button>
+      <button id="tab-ds2" onclick="switchDsTab(2)">Dataset 2</button>
+    </div>
+    <div class="ds-panel active" id="panel-ds1">
+      <h3>Dataset 1 (X)</h3>
+      <textarea id="data1" placeholder="Enter numbers, one per line or space/tab/comma separated..."></textarea>
+      <div class="btns">
+        <button onclick="importFile(1)">📂 Import</button>
+        <button onclick="pasteData(1)">📋 Paste</button>
+        <button onclick="clearData(1)">🗑 Clear</button>
+      </div>
+      <div class="count" id="count1">0 values</div>
+    </div>
+    <div class="ds-panel" id="panel-ds2">
+      <h3>Dataset 2 (Y)</h3>
+      <textarea id="data2" placeholder="Enter numbers, one per line or space/tab/comma separated..."></textarea>
+      <div class="btns">
+        <button onclick="importFile(2)">📂 Import</button>
+        <button onclick="pasteData(2)">📋 Paste</button>
+        <button onclick="clearData(2)">🗑 Clear</button>
+      </div>
+      <div class="count" id="count2">0 values</div>
+    </div>
+  </div>
+  <div id="resizer"></div>
+  <div id="right">
+    <div id="result-tabs"></div>
+    <div id="result-content"></div>
+  </div>
+</div>
+
+<div id="statusbar" class="statusbar">Ready — Alex's Statistical Analysis Tool</div>
+<div id="credit">Made with ❤️ by Alex Nica — for friends, students &amp; researchers. Vibe code with agent Gogu</div>
+
+<div class="modal" id="hyp-modal">
+  <div class="modal-content">
+    <h3 id="hyp-title">One-Sample t-Test Parameters</h3>
+    <label for="hyp-mean1">H₀ mean for Dataset 1:</label>
+    <input type="number" id="hyp-mean1" value="0" step="any">
+    <label for="hyp-mean2">H₀ mean for Dataset 2:</label>
+    <input type="number" id="hyp-mean2" value="0" step="any">
+    <div class="modal-btns">
+      <button class="cancel" onclick="hideHypDialog()">Cancel</button>
+      <button class="ok" onclick="setHypMeans()">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// LANGUAGE / i18n
+// ═══════════════════════════════════════════
+let lang = 'en';
+let STRINGS = null;
+
+async function loadStrings() {
+  const resp = await fetch('https://raw.githubusercontent.com/AlexandruNica1966/statistics-tool/master/i18n.json');
+  STRINGS = await resp.json();
+}
+// Fallback embedded strings
+STRINGS = {
+  app_title: { en: "Statistical Analysis Tool — Two-Dataset Comparison", ro: "Instrument de Analiză Statistică — Comparație Două Seturi de Date" },
+  app_credit: { en: "Made with ❤️ by Alex Nica — for friends, students & researchers. Vibe code with agent Gogu", ro: "Creat cu ❤️ de Alex Nica — pentru prieteni, studenți și cercetători. Vibe code cu agentul Gogu" },
+  btn_analyze: { en: "▶ Run Analysis", ro: "▶ Rulează Analiza" },
+  btn_hyp_mean: { en: "🎯 Set H₀ Means", ro: "🎯 Setează H₀ Medii" },
+  status_enter_data: { en: "Enter data in both datasets, then click Analyze", ro: "Introdu date în ambele seturi, apoi apasă Rulează Analiza" },
+  status_running: { en: "Running analysis...", ro: "Rulez analiza..." },
+  status_done: { en: "✓ Analysis complete ({n1} + {n2} values)", ro: "✓ Analiză completă ({n1} + {n2} valori)" },
+  statusbar_ready: { en: "Ready — Alex's Statistical Analysis Tool", ro: "Gata — Instrumentul de Analiză Statistică al lui Alex" },
+  status_failed: { en: "Analysis failed", ro: "Analiza a eșuat" },
+  dlg_hyp_title: { en: "One-Sample t-Test Parameters", ro: "Parametrii testului t pentru un eșantion" },
+  dlg_hyp_mean1: { en: "H₀ mean for Dataset 1:", ro: "Media H₀ pentru Setul 1:" },
+  dlg_hyp_mean2: { en: "H₀ mean for Dataset 2:", ro: "Media H₀ pentru Setul 2:" },
+  ds1_title: { en: "Dataset 1 (X)", ro: "Setul 1 (X)" },
+  ds2_title: { en: "Dataset 2 (Y)", ro: "Setul 2 (Y)" },
+  ds1_tab: { en: "Dataset 1", ro: "Setul 1" },
+  ds2_tab: { en: "Dataset 2", ro: "Setul 2" },
+  tab_descriptive: { en: "📊 Descriptive", ro: "📊 Statistică Descriptivă" },
+  tab_correlations: { en: "🔗 Correlations", ro: "🔗 Corelații" },
+  tab_regression: { en: "📈 Regression", ro: "📈 Regresie" },
+  tab_ttests: { en: "🔬 t-Tests", ro: "🔬 Teste t" },
+  tab_normality: { en: "📐 Normality", ro: "📐 Normalitate" },
+  tab_distributions: { en: "📊 Distributions", ro: "📊 Distribuții" },
+  tab_charts: { en: "📉 Charts", ro: "📉 Grafice" },
+  err_insufficient: { en: "Each dataset must have at least 2 numeric values.", ro: "Fiecare set trebuie să aibă cel puțin 2 valori numerice." },
+  desc_title: { en: "Descriptive Statistics", ro: "Statistică Descriptivă" },
+  desc_col_stat: { en: "Statistic", ro: "Statistică" },
+  row_n: { en: "N", ro: "N" },
+  row_mean: { en: "Mean", ro: "Medie" },
+  row_median: { en: "Median", ro: "Mediană" },
+  row_mode: { en: "Mode", ro: "Mod" },
+  row_std: { en: "Std Dev", ro: "Dev. Std" },
+  row_variance: { en: "Variance", ro: "Varianță" },
+  row_sem: { en: "SEM", ro: "ESM" },
+  row_min: { en: "Min", ro: "Min" },
+  row_max: { en: "Max", ro: "Max" },
+  row_range: { en: "Range", ro: "Amplitudine" },
+  row_q1: { en: "Q1 (25%)", ro: "Q1 (25%)" },
+  row_q3: { en: "Q3 (75%)", ro: "Q3 (75%)" },
+  row_iqr: { en: "IQR", ro: "IIQ" },
+  row_skewness: { en: "Skewness", ro: "Asimetrie" },
+  row_kurtosis: { en: "Kurtosis", ro: "Curtosis" },
+  row_ci_mean: { en: "95% CI Mean", ro: "IC 95% Medie" },
+  row_sum: { en: "Sum", ro: "Sumă" },
+  corr_pearson_title: { en: "Pearson Correlation (r)", ro: "Corelația Pearson (r)" },
+  corr_spearman_title: { en: "Spearman Rank Correlation (ρ)", ro: "Corelația Spearman (ρ)" },
+  corr_r: { en: "r (correlation coefficient)", ro: "r (coeficient de corelație)" },
+  corr_r2: { en: "r² (coefficient of determination)", ro: "r² (coeficient de determinare)" },
+  corr_pvalue: { en: "p-value", ro: "valoarea p" },
+  corr_ci: { en: "95% CI for r", ro: "IC 95% pentru r" },
+  corr_strength: { en: "Strength", ro: "Forța" },
+  corr_conclusion: { en: "Conclusion", ro: "Concluzie" },
+  corr_rho: { en: "ρ (rho — population coefficient)", ro: "ρ (rho — coeficient populațional)" },
+  corr_n_pairs: { en: "N (pairs)", ro: "N (perechi)" },
+  corr_significant: { en: "✓ Significant", ro: "✓ Semnificativ" },
+  corr_not_significant: { en: "✗ Not significant", ro: "✗ Nesemnificativ" },
+  reg_title: { en: "Linear Regression: {y} ~ {x}", ro: "Regresie Liniară: {y} ~ {x}" },
+  reg_eq: { en: "Equation: {eq}", ro: "Ecuația: {eq}" },
+  reg_r2: { en: "R²", ro: "R²" },
+  reg_r2_adj: { en: "Adjusted R²", ro: "R² Ajustat" },
+  reg_f: { en: "F-statistic", ro: "Statistică F" },
+  reg_f_pval: { en: "F p-value", ro: "Valoarea p F" },
+  reg_slope: { en: "Slope", ro: "Pantă" },
+  reg_intercept: { en: "Intercept", ro: "Intercept" },
+  reg_mse: { en: "MSE", ro: "EMC" },
+  reg_n: { en: "N", ro: "N" },
+  reg_model_sig: { en: "Model significant?", ro: "Model semnificativ?" },
+  reg_yes: { en: "✓ Yes", ro: "✓ Da" },
+  reg_no: { en: "✗ No", ro: "✗ Nu" },
+  ttest_ind_title: { en: "Independent Samples t-Tests", ro: "Teste t pentru Eșantioane Independente" },
+  ttest_paired_title: { en: "Paired Samples t-Test", ro: "Testul t pentru Eșantioane Pereche" },
+  ttest_one_title: { en: "One-Sample t-Tests", ro: "Teste t pentru un Eșantion" },
+  ttest_t: { en: "t statistic", ro: "Statistica t" },
+  ttest_df: { en: "df", ro: "gl" },
+  ttest_pvalue: { en: "p-value", ro: "valoarea p" },
+  ttest_significant: { en: "Significant?", ro: "Semnificativ?" },
+  ttest_yes: { en: "✓ Yes", ro: "✓ Da" },
+  ttest_no: { en: "✗ No", ro: "✗ Nu" },
+  norm_title: { en: "Normality Tests", ro: "Teste de Normalitate" },
+  norm_col_test: { en: "Test", ro: "Test" },
+  norm_shapiro_w: { en: "Shapiro-Wilk W", ro: "Shapiro-Wilk W" },
+  norm_shapiro_p: { en: "Shapiro-Wilk p", ro: "Shapiro-Wilk p" },
+  norm_dagostino_k2: { en: "D'Agostino K²", ro: "D'Agostino K²" },
+  norm_dagostino_p: { en: "D'Agostino p", ro: "D'Agostino p" },
+  norm_normal: { en: "Normal?", ro: "Normal?" },
+  norm_yes: { en: "✓ Yes", ro: "✓ Da" },
+  norm_no: { en: "✗ No", ro: "✗ Nu" },
+  dist_title: { en: "Distribution Comparison", ro: "Comparația Distribuțiilor" },
+  dist_ks_d: { en: "Kolmogorov-Smirnov D", ro: "Kolmogorov-Smirnov D" },
+  dist_ks_p: { en: "KS p-value", ro: "Valoarea p KS" },
+  dist_mw_u: { en: "Mann-Whitney U", ro: "Mann-Whitney U" },
+  dist_mw_p: { en: "MW p-value", ro: "Valoarea p MW" },
+  dist_rb_r: { en: "Rank-biserial r", ro: "Corelația rank-biserială" },
+  commentary_title: { en: "📝 Interpretation", ro: "📝 Interpretare" },
+  export_html: { en: "Export HTML", ro: "Export HTML" },
+  export_excel: { en: "Export Excel", ro: "Export Excel" },
+};
+
+function tr(key, kwargs) {
+  let s = (STRINGS[key] && STRINGS[key][lang]) ? STRINGS[key][lang] : key;
+  if (kwargs) for (let k in kwargs) s = s.replace('{'+k+'}', kwargs[k]);
+  return s;
+}
+
+function setLang(l) { lang = l; document.getElementById('btn-en').className = l==='en'?'active':''; document.getElementById('btn-ro').className = l==='ro'?'active':''; refreshUI(); if (window._results) showResults(window._results, window._d1, window._d2); }
+function refreshUI() {
+  document.title = tr('app_title');
+  document.getElementById('btn-run').textContent = tr('btn_analyze');
+  document.getElementById('btn-hyp').textContent = tr('btn_hyp_mean');
+  document.getElementById('status-label').textContent = tr('status_enter_data');
+  document.getElementById('statusbar').textContent = tr('statusbar_ready');
+  document.getElementById('credit').textContent = tr('app_credit');
+  document.getElementById('tab-ds1').textContent = tr('ds1_tab');
+  document.getElementById('tab-ds2').textContent = tr('ds2_tab');
+  document.getElementById('panel-ds1').querySelector('h3').textContent = tr('ds1_title');
+  document.getElementById('panel-ds2').querySelector('h3').textContent = tr('ds2_title');
+  document.getElementById('hyp-title').textContent = tr('dlg_hyp_title');
+  document.querySelector('#hyp-modal label[for="hyp-mean1"]').textContent = tr('dlg_hyp_mean1');
+  document.querySelector('#hyp-modal label[for="hyp-mean2"]').textContent = tr('dlg_hyp_mean2');
+}
+
+// ═══════════════════════════════════════════
+// DATA INPUT
+// ═══════════════════════════════════════════
+let hypMean1 = 0, hypMean2 = 0;
+
+function parseData(text) {
+  if (!text || !text.trim()) return [];
+  const nums = [];
+  const lines = text.split(/[\n\r]+/);
+  for (let line of lines) {
+    line = line.trim(); if (!line) continue;
+    const tokens = line.split(/[\t,; ]+/);
+    for (let t of tokens) {
+      t = t.trim();
+      if (t) { const n = parseFloat(t.replace(',', '.')); if (!isNaN(n)) nums.push(n); }
+    }
+  }
+  return nums;
+}
+
+function getData(num) {
+  const el = document.getElementById('data' + num);
+  const data = parseData(el.value);
+  document.getElementById('count' + num).textContent = data.length + ' values';
+  return data;
+}
+
+function clearData(num) { document.getElementById('data'+num).value = ''; document.getElementById('count'+num).textContent = '0 values'; }
+
+function pasteData(num) {
+  navigator.clipboard.readText().then(t => { document.getElementById('data'+num).value = t; getData(num); }).catch(() => alert('Cannot access clipboard'));
+}
+
+function importFile(num) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,.txt,.xlsx,.xls';
+  inp.onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    let text = '';
+    if (f.name.match(/\.xlsx?$/i)) {
+      const data = await f.arrayBuffer();
+      const wb = XLSX.read(data);
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      text = XLSX.utils.sheet_to_csv(sheet);
+    } else { text = await f.text(); }
+    document.getElementById('data'+num).value = text;
+    getData(num);
+  };
+  inp.click();
+}
+
+['data1','data2'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+  const n = id.slice(-1);
+  document.getElementById('count'+n).textContent = parseData(document.getElementById(id).value).length + ' values';
+}));
+
+function switchDsTab(n) {
+  document.getElementById('panel-ds1').className = 'ds-panel' + (n===1?' active':'');
+  document.getElementById('panel-ds2').className = 'ds-panel' + (n===2?' active':'');
+  document.getElementById('tab-ds1').className = n===1?'active':'';
+  document.getElementById('tab-ds2').className = n===2?'active':'';
+}
+
+function showHypDialog() { document.getElementById('hyp-modal').className = 'modal show'; }
+function hideHypDialog() { document.getElementById('hyp-modal').className = 'modal'; }
+function setHypMeans() {
+  hypMean1 = parseFloat(document.getElementById('hyp-mean1').value) || 0;
+  hypMean2 = parseFloat(document.getElementById('hyp-mean2').value) || 0;
+  hideHypDialog();
+}
+
+// ═══════════════════════════════════════════
+// STATISTICAL ENGINE
+// ═══════════════════════════════════════════
+
+function fmtP(p) {
+  if (p < 0.0001) return 'p < 0.0001';
+  if (p < 0.001) return 'p = ' + p.toFixed(4);
+  return 'p = ' + p.toFixed(5);
+}
+
+function strengthLabel(r) {
+  const a = Math.abs(r);
+  if (a < 0.1) return 'negligible';
+  if (a < 0.3) return 'small';
+  if (a < 0.5) return 'medium';
+  if (a < 0.7) return 'large';
+  return 'very large';
+}
+
+function descriptiveStats(data, name) {
+  const n = data.length;
+  const mean = jStat.mean(data);
+  const median = jStat.median(data);
+  const mode = jStat.mode(data);
+  const stdev = jStat.stdev(data, true);
+  const variance = jStat.variance(data, true);
+  const sem = stdev / Math.sqrt(n);
+  const min = jStat.min(data);
+  const max = jStat.max(data);
+  const range = max - min;
+  const q1 = jStat.percentile(data, 0.25);
+  const q3 = jStat.percentile(data, 0.75);
+  const iqr = q3 - q1;
+  const skewness = jStat.skewness(data);
+  const kurtosis = jStat.kurtosis(data);
+  const tcrit = jStat.studentt.inv(0.975, n - 1);
+  const ci_lower = mean - tcrit * sem;
+  const ci_upper = mean + tcrit * sem;
+  const sum = jStat.sum(data);
+  return { name, n, mean, median, mode, std: stdev, variance, sem, min, max, range, q1, q3, iqr, skewness, kurtosis, ci_95_lower: ci_lower, ci_95_upper: ci_upper, sum };
+}
+
+function pearsonCorrelation(x, y) {
+  const n = x.length;
+  const r = jStat.corrcoeff(x, y);
+  const r2 = r * r;
+  // p-value via t-distribution
+  const t = r * Math.sqrt((n - 2) / (1 - r2));
+  const p = 2 * (1 - jStat.studentt.cdf(Math.abs(t), n - 2));
+  // Fisher z CI
+  const z = Math.atanh(r);
+  const se = 1 / Math.sqrt(n - 3);
+  const zcrit = jStat.normal.inv(0.975, 0, 1);
+  const ci_lower = Math.tanh(z - zcrit * se);
+  const ci_upper = Math.tanh(z + zcrit * se);
+  const strength = strengthLabel(r);
+  const significant = p < 0.05;
+  return { r, r2, p_value: p, ci_95_lower: ci_lower, ci_95_upper: ci_upper, n, strength, significant };
+}
+
+function spearmanRho(x, y) {
+  // Rank transform
+  function rank(arr) {
+    const sorted = arr.map((v,i) => ({v,i})).sort((a,b) => a.v - b.v);
+    const ranks = new Array(arr.length);
+    for (let i = 0; i < sorted.length;) {
+      let j = i;
+      while (j < sorted.length && sorted[j].v === sorted[i].v) j++;
+      const avgRank = (i + j + 1) / 2;
+      for (let k = i; k < j; k++) ranks[sorted[k].i] = avgRank;
+      i = j;
+    }
+    return ranks;
+  }
+  const rx = rank(x), ry = rank(y);
+  const rho = jStat.corrcoeff(rx, ry);
+  const n = x.length;
+  const t = rho * Math.sqrt((n - 2) / (1 - rho * rho));
+  const p = 2 * (1 - jStat.studentt.cdf(Math.abs(t), n - 2));
+  const strength = strengthLabel(rho);
+  const significant = p < 0.05;
+  return { rho, p_value: p, n, strength, significant };
+}
+
+function linearRegression(x, y, xName, yName) {
+  const n = x.length;
+  const meanX = jStat.mean(x), meanY = jStat.mean(y);
+  const ssxy = x.reduce((s, xi, i) => s + (xi - meanX) * (y[i] - meanY), 0);
+  const ssxx = x.reduce((s, xi) => s + (xi - meanX) * (xi - meanX), 0);
+  const slope = ssxy / ssxx;
+  const intercept = meanY - slope * meanX;
+  const predictions = x.map(xi => intercept + slope * xi);
+  const residuals = y.map((yi, i) => yi - predictions[i]);
+  const ssres = residuals.reduce((s, r) => s + r * r, 0);
+  const sstot = y.reduce((s, yi) => s + (yi - meanY) * (yi - meanY), 0);
+  const r2 = 1 - ssres / sstot;
+  const r2adj = 1 - (1 - r2) * (n - 1) / (n - 2);
+  const mse = ssres / (n - 2);
+  const slopeSE = Math.sqrt(mse / ssxx);
+  const interceptSE = Math.sqrt(mse * (1/n + meanX*meanX/ssxx));
+  const slopeT = slope / slopeSE;
+  const interceptT = intercept / interceptSE;
+  const slopeP = 2 * (1 - jStat.studentt.cdf(Math.abs(slopeT), n - 2));
+  const interceptP = 2 * (1 - jStat.studentt.cdf(Math.abs(interceptT), n - 2));
+  const fStat = (sstot - ssres) / mse;
+  const fP = 1 - jStat.centralF.cdf(fStat, 1, n - 2);
+  const tcrit = jStat.studentt.inv(0.975, n - 2);
+  const slopeCI_l = slope - tcrit * slopeSE, slopeCI_u = slope + tcrit * slopeSE;
+  const intCI_l = intercept - tcrit * interceptSE, intCI_u = intercept + tcrit * interceptSE;
+  const significant = fP < 0.05;
+  const eq = yName + ' = ' + intercept.toFixed(4) + ' + ' + slope.toFixed(4) + ' * ' + xName;
+  return { x_name: xName, y_name: yName, intercept, slope, r2, r2_adj: r2adj, f_statistic: fStat, f_pvalue: fP,
+    slope_se: slopeSE, intercept_se: interceptSE, slope_t: slopeT, intercept_t: interceptT,
+    slope_p: slopeP, intercept_p: interceptP, slope_ci_lower: slopeCI_l, slope_ci_upper: slopeCI_u,
+    intercept_ci_lower: intCI_l, intercept_ci_upper: intCI_u, n, df_residual: n-2, mse,
+    equation: eq, predictions, residuals, significant };
+}
+
+function leveneTest(x, y) {
+  const mx = jStat.mean(x), my = jStat.mean(y);
+  const zx = x.map(v => Math.abs(v - mx)), zy = y.map(v => Math.abs(v - my));
+  const n1 = x.length, n2 = y.length;
+  const mzx = jStat.mean(zx), mzy = jStat.mean(zy);
+  const mz = (jStat.sum(zx) + jStat.sum(zy)) / (n1 + n2);
+  const num = (n1 + n2 - 2) * (n1*(mzx-mz)*(mzx-mz) + n2*(mzy-mz)*(mzy-mz));
+  const den = (zx.reduce((s,v)=>s+(v-mzx)*(v-mzx),0) + zy.reduce((s,v)=>s+(v-mzy)*(v-mzy),0));
+  const W = num / den;
+  const p = 1 - jStat.centralF.cdf(W, 1, n1 + n2 - 2);
+  return { statistic: W, pvalue: p, equal: p >= 0.05 };
+}
+
+function independentTTests(x, y) {
+  const n1 = x.length, n2 = y.length;
+  const m1 = jStat.mean(x), m2 = jStat.mean(y);
+  const s1 = jStat.stdev(x, true), s2 = jStat.stdev(y, true);
+  const meanDiff = m1 - m2;
+  // Student (equal var)
+  const sp = Math.sqrt(((n1-1)*s1*s1 + (n2-1)*s2*s2) / (n1 + n2 - 2));
+  const tStudent = meanDiff / (sp * Math.sqrt(1/n1 + 1/n2));
+  const dfStudent = n1 + n2 - 2;
+  const pStudent = 2 * (1 - jStat.studentt.cdf(Math.abs(tStudent), dfStudent));
+  // Welch
+  const seW = Math.sqrt(s1*s1/n1 + s2*s2/n2);
+  const tWelch = meanDiff / seW;
+  const dfWelch_num = (s1*s1/n1 + s2*s2/n2) * (s1*s1/n1 + s2*s2/n2);
+  const dfWelch_den = (s1*s1/n1)*(s1*s1/n1)/(n1-1) + (s2*s2/n2)*(s2*s2/n2)/(n2-1);
+  const dfWelch = dfWelch_num / dfWelch_den;
+  const pWelch = 2 * (1 - jStat.studentt.cdf(Math.abs(tWelch), dfWelch));
+  // Levene
+  const lev = leveneTest(x, y);
+  // Cohen's d
+  const pooledStd = Math.sqrt((s1*s1 + s2*s2) / 2);
+  const cohensD = pooledStd !== 0 ? meanDiff / pooledStd : 0;
+  const dStrength = strengthLabel(cohensD);
+  // CI
+  const tCrit = jStat.studentt.inv(0.975, dfWelch);
+  const ciL = meanDiff - tCrit * seW, ciU = meanDiff + tCrit * seW;
+  return { n1, n2, mean1: m1, mean2: m2, std1: s1, std2: s2, mean_difference: meanDiff,
+    ci_95_lower: ciL, ci_95_upper: ciU,
+    levene_statistic: lev.statistic, levene_pvalue: lev.pvalue, variances_equal: lev.equal,
+    student_t: tStudent, student_pvalue: pStudent, student_df: dfStudent,
+    student_significant: pStudent < 0.05,
+    welch_t: tWelch, welch_pvalue: pWelch, welch_significant: pWelch < 0.05,
+    cohens_d: cohensD, cohens_d_strength: dStrength };
+}
+
+function pairedTTest(x, y) {
+  let xs = x.slice(), ys = y.slice();
+  if (xs.length !== ys.length) { const m = Math.min(xs.length, ys.length); xs = xs.slice(0,m); ys = ys.slice(0,m); }
+  const diffs = xs.map((xi, i) => xi - ys[i]);
+  const n = diffs.length;
+  const meanD = jStat.mean(diffs);
+  const stdD = jStat.stdev(diffs, true);
+  const seD = stdD / Math.sqrt(n);
+  const t = meanD / seD;
+  const df = n - 1;
+  const p = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
+  const cohensD = stdD !== 0 ? meanD / stdD : 0;
+  const dStrength = strengthLabel(cohensD);
+  const tCrit = jStat.studentt.inv(0.975, df);
+  const ciL = meanD - tCrit * seD, ciU = meanD + tCrit * seD;
+  return { n_pairs: n, mean_difference: meanD, std_difference: stdD, se_difference: seD,
+    t_statistic: t, p_value: p, df, ci_95_lower: ciL, ci_95_upper: ciU,
+    cohens_d: cohensD, cohens_d_strength: dStrength, significant: p < 0.05 };
+}
+
+function oneSampleTTest(data, h0) {
+  const n = data.length;
+  const mean = jStat.mean(data);
+  const std = jStat.stdev(data, true);
+  const sem = std / Math.sqrt(n);
+  const t = (mean - h0) / sem;
+  const df = n - 1;
+  const p = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
+  const tCrit = jStat.studentt.inv(0.975, df);
+  const ciL = mean - tCrit * sem, ciU = mean + tCrit * sem;
+  const cohensD = std !== 0 ? (mean - h0) / std : 0;
+  return { n, mean, std, sem, hypothesized_mean: h0, t_statistic: t, p_value: p, df,
+    ci_95_lower: ciL, ci_95_upper: ciU, cohens_d: cohensD, significant: p < 0.05 };
+}
+
+// Shapiro-Wilk implementation (AS R94 / Royston 1995 approximation)
+function shapiroWilk(data) {
+  const n = data.length;
+  if (n < 3 || n > 5000) return { statistic: null, pvalue: null };
+  const sorted = data.slice().sort((a,b) => a - b);
+  const mean = jStat.mean(sorted);
+  // Blom scores for expected normal order statistics
+  const m = new Array(n);
+  for (let i = 0; i < n; i++) m[i] = jStat.normal.inv((i + 1 - 0.375) / (n + 0.25), 0, 1);
+  const sumM2 = m.reduce((s,v) => s + v*v, 0);
+  const c = m.map(v => v / Math.sqrt(sumM2));
+  const a = new Array(n);
+  a[n-1] = c[n-1]; a[0] = -c[n-1];
+  if (n > 3) {
+    const mm = m.map(v => v*v);
+    const ssm = mm.reduce((s,v) => s + v, 0);
+    a[n-2] = c[n-2] - m[n-1] * m[n-2] * a[n-1] / (1 - m[n-1]*m[n-1]);
+    a[1] = -a[n-2];
+    for (let i = 2; i < n - 2; i++) {
+      a[n-1-i] = c[n-1-i] / Math.sqrt((ssm - m[n-1-i]*m[n-1-i]) / (1 - m[n-1-i]*m[n-1-i]));
+      a[i] = -a[n-1-i];
+    }
+  }
+  const W_num = a.reduce((s, ai, i) => s + ai * sorted[i], 0);
+  const W = (W_num * W_num) / sorted.reduce((s, v) => s + (v-mean)*(v-mean), 0);
+  // Royston p-value approximation
+  let mu, sigma;
+  if (n <= 11) {
+    const g = -2.273 + 0.459 * n;
+    mu = 0.5440 - 0.39978 * n + 0.025054 * n*n - 0.0006714 * n*n*n;
+    sigma = Math.exp(1.3822 - 0.77857 * n + 0.062767 * n*n - 0.0020322 * n*n*n);
+  } else {
+    const lnN = Math.log(n);
+    const lnN2 = lnN * lnN, lnN3 = lnN2 * lnN;
+    mu = -1.5861 - 0.31082 * lnN - 0.083751 * lnN2 + 0.0038915 * lnN3;
+    sigma = Math.exp(0.4803 - 0.082676 * lnN + 0.0030302 * lnN2);
+  }
+  const z = (Math.log(1 - W) - mu) / sigma;
+  const p = 1 - jStat.normal.cdf(z, 0, 1);
+  return { statistic: W, pvalue: p };
+}
+
+function dagostinoTest(data) {
+  const n = data.length;
+  const skew = jStat.skewness(data);
+  const kurt = jStat.kurtosis(data);
+  // Skewness -> Z1
+  const b = 3*(n*n + 27*n - 70)*(n+1)*(n+3) / ((n-2)*(n+5)*(n+7)*(n+9));
+  const w2 = -1 + Math.sqrt(2*(b-1));
+  const d = 1 / Math.sqrt(Math.log(Math.sqrt(w2)));
+  const y = skew * Math.sqrt((n+1)*(n+3) / (6*(n-2)));
+  const z1 = d * Math.log(y/w2 + Math.sqrt(y*y/(w2*w2) + 1));
+  // Kurtosis -> Z2
+  const Ek = 3*(n-1)/(n+1);
+  const vk = 24*n*(n-2)*(n-3) / ((n+1)*(n+1)*(n+3)*(n+5));
+  const x = (kurt - Ek) / Math.sqrt(vk);
+  const b1_2 = 6*(n*n - 5*n + 2) / ((n+7)*(n+9)) * Math.sqrt(6*(n+3)*(n+5) / (n*(n-2)*(n-3)));
+  const A = 6 + 8/b1_2 * (2/b1_2 + Math.sqrt(1 + 4/(b1_2*b1_2)));
+  const z2 = ((1 - 2/(9*A)) - Math.cbrt((1 - 2/A) / (1 + x*Math.sqrt(2/(A-4)))));
+  z2 = z2 * Math.sqrt(2/(9*A));
+  // Omnibus K^2
+  const K2 = z1*z1 + z2*z2;
+  const p = 1 - jStat.chisquare.cdf(K2, 2);
+  return { statistic: K2, pvalue: p, skew_z: z1, kurt_z: z2 };
+}
+
+function normalityTests(data, name) {
+  const n = data.length;
+  const sw = shapiroWilk(data);
+  const dag = dagostinoTest(data);
+  return {
+    name,
+    n,
+    shapiro_statistic: sw.statistic,
+    shapiro_pvalue: sw.pvalue,
+    shapiro_normal: sw.pvalue !== null ? sw.pvalue >= 0.05 : null,
+    dagostino_statistic: dag.statistic,
+    dagostino_pvalue: dag.pvalue,
+    dagostino_normal: dag.pvalue >= 0.05,
+  };
+}
+
+function ksTwoSample(x, y) {
+  const all = [...x, ...y].sort((a,b) => a-b);
+  const nx = x.length, ny = y.length;
+  let D = 0;
+  for (let i = 0; i < all.length; i++) {
+    const cx = x.filter(v => v <= all[i]).length / nx;
+    const cy = y.filter(v => v <= all[i]).length / ny;
+    D = Math.max(D, Math.abs(cx - cy));
+  }
+  // p-value approximation
+  const n = nx * ny / (nx + ny);
+  const lambda = (Math.sqrt(n) + 0.12 + 0.11 / Math.sqrt(n)) * D;
+  let p = 0;
+  for (let k = 1; k <= 100; k++) {
+    const term = (k % 2 === 0 ? 1 : -1) * 2 * Math.exp(-2 * k * k * lambda * lambda);
+    p += term;
+    if (Math.abs(term) < 1e-10) break;
+  }
+  p = Math.max(0, Math.min(1, p));
+  return { statistic: D, pvalue: p, significant: p < 0.05 };
+}
+
+function mannWhitneyU(x, y) {
+  const all = [...x.map(v=>({v, g:0})), ...y.map(v=>({v, g:1}))];
+  all.sort((a,b) => a.v - b.v);
+  // Assign ranks with tie handling
+  for (let i = 0; i < all.length;) {
+    let j = i;
+    while (j < all.length && all[j].v === all[i].v) j++;
+    const avgRank = (i + j + 1) / 2;
+    for (let k = i; k < j; k++) all[k].rank = avgRank;
+    i = j;
+  }
+  const R1 = all.filter(o => o.g === 0).reduce((s,o) => s + o.rank, 0);
+  const n1 = x.length, n2 = y.length;
+  const U1 = R1 - n1*(n1+1)/2;
+  const U2 = n1*n2 - U1;
+  const U = Math.min(U1, U2);
+  const mu = n1*n2/2;
+  const sigma = Math.sqrt(n1*n2*(n1+n2+1)/12);
+  const z = (U - mu) / sigma;
+  const p = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1));
+  const rankBiserial = 1 - 2 * U / (n1 * n2);
+  return { u: U, pvalue: p, significant: p < 0.05, rank_biserial: rankBiserial };
+}
+
+function runAllAnalyses(d1, d2, name1, name2) {
+  if (d1.length < 2 || d2.length < 2) return { error: tr('err_insufficient') };
+  const n = Math.min(d1.length, d2.length);
+  return {
+    descriptive1: descriptiveStats(d1, name1),
+    descriptive2: descriptiveStats(d2, name2),
+    pearson: pearsonCorrelation(d1.slice(0,n), d2.slice(0,n)),
+    spearman: spearmanRho(d1.slice(0,n), d2.slice(0,n)),
+    regression_2on1: linearRegression(d1.slice(0,n), d2.slice(0,n), name1, name2),
+    independent_ttest: independentTTests(d1, d2),
+    paired_ttest: pairedTTest(d1, d2),
+    onesample_ttest1: oneSampleTTest(d1, hypMean1),
+    onesample_ttest2: oneSampleTTest(d2, hypMean2),
+    normality1: normalityTests(d1, name1),
+    normality2: normalityTests(d2, name2),
+    distribution_comparison: { ks: ksTwoSample(d1, d2), mw: mannWhitneyU(d1, d2) },
+  };
+}
+
+// ═══════════════════════════════════════════
+// UI: RESULTS DISPLAY
+// ═══════════════════════════════════════════
+
+function makeTable(rows, headers) {
+  let h = '<table class="stats-table"><thead><tr>';
+  headers.forEach(hdr => h += '<th>' + hdr + '</th>');
+  h += '</tr></thead><tbody>';
+  rows.forEach(row => { h += '<tr>'; row.forEach(cell => h += '<td>' + cell + '</td>'); h += '</tr>'; });
+  h += '</tbody></table>';
+  return h;
+}
+
+function makeSection(title) { return '<div class="section-title">' + title + '</div>'; }
+function makeCommentary(text) { return '<div class="commentary">' + text + '</div>'; }
+
+function showResults(results, d1, d2) {
+  window._results = results; window._d1 = d1; window._d2 = d2;
+  const c = document.getElementById('result-content');
+  const tabs = document.getElementById('result-tabs');
+  tabs.innerHTML = '';
+  c.innerHTML = '';
+
+  if (results.error) { c.innerHTML = '<div style="color:#ce9178;font-size:16px;padding:20px;text-align:center">' + results.error + '</div>'; return; }
+
+  const name1 = results.descriptive1.name, name2 = results.descriptive2.name;
+
+  const tabDefs = [
+    ['desc', tr('tab_descriptive'), () => renderDescriptive(results, name1, name2)],
+    ['corr', tr('tab_correlations'), () => renderCorrelations(results)],
+    ['reg', tr('tab_regression'), () => renderRegression(results)],
+    ['ttest', tr('tab_ttests'), () => renderTTests(results, name1, name2)],
+    ['norm', tr('tab_normality'), () => renderNormality(results, name1, name2)],
+    ['dist', tr('tab_distributions'), () => renderDistribution(results)],
+    ['charts', tr('tab_charts'), () => { renderCharts(results, d1, d2, name1, name2); }],
+  ];
+
+  tabDefs.forEach(([id, label, fn]) => {
+    const btn = document.createElement('button'); btn.textContent = label;
+    btn.onclick = () => { tabs.querySelectorAll('button').forEach(b=>b.className=''); btn.className='active'; c.innerHTML=''; fn(); };
+    tabs.appendChild(btn);
+  });
+  // Activate first tab
+  tabs.firstChild.click();
+
+  document.getElementById('btn-export').disabled = false;
+  document.getElementById('status-label').textContent = tr('status_done', {n1: d1.length, n2: d2.length});
+  document.getElementById('status-label').style.color = '#4ec9b0';
+}
+
+function runAnalysis() {
+  const d1 = getData(1), d2 = getData(2);
+  document.getElementById('status-label').textContent = tr('status_running');
+  document.getElementById('status-label').style.color = '#888';
+  const results = runAllAnalyses(d1, d2, tr('ds1_tab'), tr('ds2_tab'));
+  showResults(results, d1, d2);
+}
+
+function renderDescriptive(r, n1, n2) {
+  const c = document.getElementById('result-content');
+  const d1 = r.descriptive1, d2 = r.descriptive2;
+  let h = makeSection(tr('desc_title'));
+  h += makeTable([
+    [tr('row_n'), d1.n, d2.n],
+    [tr('row_mean'), d1.mean.toFixed(6), d2.mean.toFixed(6)],
+    [tr('row_median'), d1.median.toFixed(6), d2.median.toFixed(6)],
+    [tr('row_mode'), d1.mode.toFixed(6), d2.mode.toFixed(6)],
+    [tr('row_std'), d1.std.toFixed(6), d2.std.toFixed(6)],
+    [tr('row_variance'), d1.variance.toFixed(6), d2.variance.toFixed(6)],
+    [tr('row_sem'), d1.sem.toFixed(6), d2.sem.toFixed(6)],
+    [tr('row_min'), d1.min.toFixed(6), d2.min.toFixed(6)],
+    [tr('row_q1'), d1.q1.toFixed(6), d2.q1.toFixed(6)],
+    [tr('row_q3'), d1.q3.toFixed(6), d2.q3.toFixed(6)],
+    [tr('row_iqr'), d1.iqr.toFixed(6), d2.iqr.toFixed(6)],
+    [tr('row_max'), d1.max.toFixed(6), d2.max.toFixed(6)],
+    [tr('row_range'), d1.range.toFixed(6), d2.range.toFixed(6)],
+    [tr('row_skewness'), d1.skewness.toFixed(4), d2.skewness.toFixed(4)],
+    [tr('row_kurtosis'), d1.kurtosis.toFixed(4), d2.kurtosis.toFixed(4)],
+    [tr('row_ci_mean'), '['+d1.ci_95_lower.toFixed(4)+', '+d1.ci_95_upper.toFixed(4)+']', '['+d2.ci_95_lower.toFixed(4)+', '+d2.ci_95_upper.toFixed(4)+']'],
+    [tr('row_sum'), d1.sum.toFixed(4), d2.sum.toFixed(4)],
+  ], [tr('desc_col_stat'), n1, n2]);
+  h += '<div class="commentary-title">' + tr('commentary_title') + '</div>';
+  h += makeCommentary('Dataset 1: ' + d1.n + ' obs (M=' + d1.mean.toFixed(3) + ', SD=' + d1.std.toFixed(3) + '). Dataset 2: ' + d2.n + ' obs (M=' + d2.mean.toFixed(3) + ', SD=' + d2.std.toFixed(3) + ').');
+  c.innerHTML = h;
+}
+
+function renderCorrelations(r) {
+  const c = document.getElementById('result-content');
+  const p = r.pearson, s = r.spearman;
+  let h = makeSection(tr('corr_pearson_title'));
+  h += makeTable([
+    [tr('corr_r'), p.r.toFixed(6)],
+    [tr('corr_r2'), p.r2.toFixed(6)],
+    [tr('corr_pvalue'), fmtP(p.p_value)],
+    [tr('corr_ci'), '['+p.ci_95_lower.toFixed(4)+', '+p.ci_95_upper.toFixed(4)+']'],
+    [tr('corr_strength'), p.strength],
+    [tr('corr_conclusion'), '<span class="'+(p.significant?'sig':'not-sig')+'">'+(p.significant?tr('corr_significant'):tr('corr_not_significant'))+' (α=0.05)</span>'],
+  ], [tr('desc_col_stat'), 'Value']);
+  h += '<div class="commentary-title">' + tr('commentary_title') + '</div>';
+  h += makeCommentary('Pearson r = ' + p.r.toFixed(3) + ' (' + p.strength + '). r² = ' + p.r2.toFixed(3) + ' (' + (p.r2*100).toFixed(1) + '% of variance shared). ' + (p.significant ? 'Statistically significant.' : 'Not statistically significant.'));
+  h += makeSection(tr('corr_spearman_title'));
+  h += makeTable([
+    [tr('corr_rho'), s.rho.toFixed(6)],
+    [tr('corr_pvalue'), fmtP(s.p_value)],
+    [tr('corr_n_pairs'), s.n],
+    [tr('corr_strength'), s.strength],
+    [tr('corr_conclusion'), '<span class="'+(s.significant?'sig':'not-sig')+'">'+(s.significant?tr('corr_significant'):tr('corr_not_significant'))+' (α=0.05)</span>'],
+  ], [tr('desc_col_stat'), 'Value']);
+  c.innerHTML = h;
+}
+
+function renderRegression(r) {
+  const c = document.getElementById('result-content');
+  const reg = r.regression_2on1;
+  let h = makeSection(tr('reg_title', {y: reg.y_name, x: reg.x_name}));
+  h += '<div class="eq">' + tr('reg_eq', {eq: reg.equation}) + '</div>';
+  const sigClass = reg.significant ? 'sig' : 'not-sig';
+  h += makeTable([
+    [tr('reg_r2'), reg.r2.toFixed(6)],
+    [tr('reg_r2_adj'), reg.r2_adj.toFixed(6)],
+    [tr('reg_f'), 'F(1, ' + reg.df_residual + ') = ' + reg.f_statistic.toFixed(4)],
+    [tr('reg_f_pval'), fmtP(reg.f_pvalue)],
+    ['', ''],
+    [tr('reg_intercept'), reg.intercept.toFixed(6)],
+    ['  SE', reg.intercept_se.toFixed(6)],
+    ['  t', reg.intercept_t.toFixed(4)],
+    ['  p', fmtP(reg.intercept_p)],
+    ['  95% CI', '['+reg.intercept_ci_lower.toFixed(4)+', '+reg.intercept_ci_upper.toFixed(4)+']'],
+    ['', ''],
+    [tr('reg_slope'), reg.slope.toFixed(6)],
+    ['  SE', reg.slope_se.toFixed(6)],
+    ['  t', reg.slope_t.toFixed(4)],
+    ['  p', fmtP(reg.slope_p)],
+    ['  95% CI', '['+reg.slope_ci_lower.toFixed(4)+', '+reg.slope_ci_upper.toFixed(4)+']'],
+    ['', ''],
+    [tr('reg_mse'), reg.mse.toFixed(6)],
+    [tr('reg_n'), reg.n],
+    [tr('reg_model_sig'), '<span class="'+sigClass+'">'+(reg.significant?tr('reg_yes'):tr('reg_no'))+'</span>'],
+  ], [tr('desc_col_stat'), 'Value']);
+  h += '<div class="commentary-title">' + tr('commentary_title') + '</div>';
+  h += makeCommentary('R² = ' + reg.r2.toFixed(3) + ' (' + (reg.r2*100).toFixed(1) + '% of variance explained). Per 1-unit increase in ' + reg.x_name + ', ' + reg.y_name + ' changes by ' + reg.slope.toFixed(4) + '.');
+  h += makeCommentary(reg.significant ? 'Model is statistically significant — slope is unlikely to be zero.' : 'Model is not statistically significant.');
+  c.innerHTML = h;
+}
+
+function renderTTests(r, n1, n2) {
+  const c = document.getElementById('result-content');
+  const ind = r.independent_ttest, paired = r.paired_ttest, os1 = r.onesample_ttest1, os2 = r.onesample_ttest2;
+  let h = makeSection(tr('ttest_ind_title'));
+  h += makeTable([
+    [tr('ttest_t'), ind.student_t.toFixed(4), ind.welch_t.toFixed(4)],
+    [tr('ttest_df'), ind.student_df, Math.round(ind.welch_t*ind.welch_t/(ind.mean_difference*ind.mean_difference)*(ind.n1+ind.n2-2) || 0)],
+    [tr('ttest_pvalue'), fmtP(ind.student_pvalue), fmtP(ind.welch_pvalue)],
+    [tr('ttest_significant'), ind.student_significant?tr('ttest_yes'):tr('ttest_no'), ind.welch_significant?tr('ttest_yes'):tr('ttest_no')],
+  ], ['', 'Student (equal var)', 'Welch (unequal var)']);
+  const levOk = ind.variances_equal;
+  h += '<div style="font-size:12px;padding:4px;color:'+(levOk?'#4ec9b0':'#ce9178')+'">Levene: F='+ind.levene_statistic.toFixed(4)+', '+fmtP(ind.levene_pvalue)+' → '+(levOk?'Equal ✓ — use Student':'Differ ✗ — use Welch')+'</div>';
+  h += makeCommentary('Mean diff: '+ind.mean_difference.toFixed(4)+' [95% CI: '+ind.ci_95_lower.toFixed(4)+', '+ind.ci_95_upper.toFixed(4)+']. Cohen\'s d = '+ind.cohens_d.toFixed(3)+' ('+ind.cohens_d_strength+').');
+  h += makeSection(tr('ttest_paired_title'));
+  const ps = paired.significant ? 'sig' : 'not-sig';
+  h += makeTable([
+    [tr('ttest_df'), paired.n_pairs],
+    ['Mean diff', paired.mean_difference.toFixed(6)],
+    ['Std diff', paired.std_difference.toFixed(6)],
+    [tr('ttest_t'), 't('+paired.df+') = '+paired.t_statistic.toFixed(4)],
+    [tr('ttest_pvalue'), fmtP(paired.p_value)],
+    ['95% CI', '['+paired.ci_95_lower.toFixed(4)+', '+paired.ci_95_upper.toFixed(4)+']'],
+    ["Cohen's d", paired.cohens_d.toFixed(4)+' ('+paired.cohens_d_strength+')'],
+    ['Conclusion', '<span class="'+ps+'">'+(paired.significant?'✓ Significant':'✗ Not significant')+'</span>'],
+  ], [tr('desc_col_stat'), 'Value']);
+  h += makeSection(tr('ttest_one_title'));
+  h += makeTable([
+    ['H₀: μ =', os1.hypothesized_mean, os2.hypothesized_mean],
+    ['Sample Mean', os1.mean.toFixed(4), os2.mean.toFixed(4)],
+    [tr('ttest_t'), 't('+os1.df+') = '+os1.t_statistic.toFixed(4), 't('+os2.df+') = '+os2.t_statistic.toFixed(4)],
+    [tr('ttest_pvalue'), fmtP(os1.p_value), fmtP(os2.p_value)],
+    ['95% CI', '['+os1.ci_95_lower.toFixed(4)+', '+os1.ci_95_upper.toFixed(4)+']', '['+os2.ci_95_lower.toFixed(4)+', '+os2.ci_95_upper.toFixed(4)+']'],
+    ["Cohen's d", os1.cohens_d.toFixed(4), os2.cohens_d.toFixed(4)],
+    [tr('ttest_significant'), os1.significant?tr('ttest_yes'):tr('ttest_no'), os2.significant?tr('ttest_yes'):tr('ttest_no')],
+  ], [tr('desc_col_stat'), n1, n2]);
+  c.innerHTML = h;
+}
+
+function renderNormality(r, n1, n2) {
+  const c = document.getElementById('result-content');
+  const nrm1 = r.normality1, nrm2 = r.normality2;
+  let h = makeSection(tr('norm_title'));
+  h += makeTable([
+    ['N', nrm1.n, nrm2.n],
+    [tr('norm_shapiro_w'), nrm1.shapiro_statistic!==null?nrm1.shapiro_statistic.toFixed(4):'N/A', nrm2.shapiro_statistic!==null?nrm2.shapiro_statistic.toFixed(4):'N/A'],
+    [tr('norm_shapiro_p'), nrm1.shapiro_pvalue!==null?fmtP(nrm1.shapiro_pvalue):'N/A', nrm2.shapiro_pvalue!==null?fmtP(nrm2.shapiro_pvalue):'N/A'],
+    [tr('norm_dagostino_k2'), nrm1.dagostino_statistic.toFixed(4), nrm2.dagostino_statistic.toFixed(4)],
+    [tr('norm_dagostino_p'), fmtP(nrm1.dagostino_pvalue), fmtP(nrm2.dagostino_pvalue)],
+    [tr('norm_normal'), nrm1.dagostino_normal?tr('norm_yes'):tr('norm_no'), nrm2.dagostino_normal?tr('norm_yes'):tr('norm_no')],
+  ], [tr('norm_col_test'), n1, n2]);
+  h += '<div class="commentary-title">' + tr('commentary_title') + '</div>';
+  const both = nrm1.dagostino_normal && nrm2.dagostino_normal;
+  const one = nrm1.dagostino_normal || nrm2.dagostino_normal;
+  if (both) h += makeCommentary('Both datasets appear normally distributed. Parametric tests are appropriate.');
+  else if (one) h += makeCommentary('One dataset deviates from normality. Consider non-parametric alternatives for that dataset.');
+  else h += makeCommentary('Both datasets deviate from normality. Non-parametric tests (Spearman, Mann-Whitney) recommended.');
+  c.innerHTML = h;
+}
+
+function renderDistribution(r) {
+  const c = document.getElementById('result-content');
+  const dc = r.distribution_comparison;
+  let h = makeSection(tr('dist_title'));
+  h += makeTable([
+    [tr('dist_ks_d'), dc.ks.statistic.toFixed(4)],
+    [tr('dist_ks_p'), fmtP(dc.ks.pvalue)],
+    ['KS conclusion', dc.ks.significant ? 'Distributions differ significantly' : 'Distributions do not differ significantly'],
+    ['', ''],
+    [tr('dist_mw_u'), dc.mw.u.toFixed(4)],
+    [tr('dist_mw_p'), fmtP(dc.mw.pvalue)],
+    ['MW significant?', dc.mw.significant ? tr('ttest_yes') : tr('ttest_no')],
+    [tr('dist_rb_r'), dc.mw.rank_biserial.toFixed(4)],
+  ], [tr('desc_col_stat'), 'Value']);
+  h += '<div class="commentary-title">' + tr('commentary_title') + '</div>';
+  h += makeCommentary('KS test ' + (dc.ks.significant?'suggests':'does not suggest') + ' the distributions differ. MW test ' + (dc.mw.significant?'indicates':'does not indicate') + ' significant median/rank difference.');
+  c.innerHTML = h;
+}
+
+function renderCharts(r, d1, d2, n1, n2) {
+  const c = document.getElementById('result-content');
+  const n = Math.min(d1.length, d2.length);
+  const reg = r.regression_2on1;
+
+  c.innerHTML = '<div class="chart-container" id="chart-hist"></div><div class="chart-container" id="chart-box"></div><div class="chart-container" id="chart-scatter"></div><div class="chart-container" id="chart-qq"></div><div class="chart-container" id="chart-resid"></div>';
+
+  // Histograms
+  const hTrace1 = { x: d1, type: 'histogram', name: n1, opacity: 0.6, marker: { color: '#569cd6' }, histnorm: 'probability density', nbinsx: Math.max(5, Math.ceil(Math.sqrt(d1.length))) };
+  const hTrace2 = { x: d2, type: 'histogram', name: n2, opacity: 0.6, marker: { color: '#ce9178' }, histnorm: 'probability density', nbinsx: Math.max(5, Math.ceil(Math.sqrt(d2.length))) };
+  const hLayout = { template: 'plotly_dark', paper_bgcolor: '#1e1e1e', plot_bgcolor: '#252526', title: 'Histograms with Density', xaxis: { title: 'Value' }, yaxis: { title: 'Density' } };
+  Plotly.newPlot('chart-hist', [hTrace1, hTrace2], hLayout, { responsive: true });
+
+  // Box plots
+  const bTrace1 = { y: d1, type: 'box', name: n1, marker: { color: '#569cd6' } };
+  const bTrace2 = { y: d2, type: 'box', name: n2, marker: { color: '#ce9178' } };
+  Plotly.newPlot('chart-box', [bTrace1, bTrace2], { ...hLayout, title: 'Box Plots' }, { responsive: true });
+
+  // Scatter + regression
+  const xRange = [Math.min(...d1.slice(0,n)), Math.max(...d1.slice(0,n))];
+  const regLine = { x: xRange, y: xRange.map(xv => reg.intercept + reg.slope * xv), mode: 'lines', name: reg.equation, line: { color: '#ce9178' } };
+  const scTrace = { x: d1.slice(0,n), y: d2.slice(0,n), mode: 'markers', type: 'scatter', name: 'Data', marker: { color: '#569cd6', size: 6 } };
+  Plotly.newPlot('chart-scatter', [scTrace, regLine], { ...hLayout, title: 'Scatter (r='+r.pearson.r.toFixed(4)+')', xaxis: { title: n1 }, yaxis: { title: n2 } }, { responsive: true });
+
+  // Q-Q plots side by side
+  function qqData(data) {
+    const sorted = data.slice().sort((a,b)=>a-b);
+    const n = sorted.length;
+    const theo = sorted.map((_, i) => jStat.normal.inv((i+1-0.5)/n, 0, 1));
+    return { theo, sample: sorted };
+  }
+  const qq1 = qqData(d1), qq2 = qqData(d2);
+  const qqTrace1 = { x: qq1.theo, y: qq1.sample, mode: 'markers', type: 'scatter', name: n1, marker: { color: '#569cd6', size: 4 } };
+  const qqTrace2 = { x: qq2.theo, y: qq2.sample, mode: 'markers', type: 'scatter', name: n2, marker: { color: '#ce9178', size: 4 } };
+  Plotly.newPlot('chart-qq', [qqTrace1, qqTrace2], { ...hLayout, title: 'Q-Q Plots', xaxis: { title: 'Theoretical' }, yaxis: { title: 'Sample' } }, { responsive: true });
+
+  // Residuals
+  const residTrace = { x: reg.predictions, y: reg.residuals, mode: 'markers', type: 'scatter', name: 'Residuals', marker: { color: '#569cd6', size: 5 } };
+  Plotly.newPlot('chart-resid', [residTrace], { ...hLayout, title: 'Residuals vs Fitted', xaxis: { title: 'Fitted' }, yaxis: { title: 'Residuals' }, shapes: [{ type: 'line', x0: Math.min(...reg.predictions), x1: Math.max(...reg.predictions), y0: 0, y1: 0, line: { color: '#ce9178', dash: 'dash' } }] }, { responsive: true });
+}
+
+// ═══════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════
+function exportResults() {
+  if (!window._results || window._results.error) return;
+  // Export HTML
+  const htmlContent = document.getElementById('result-content').innerHTML;
+  const fullHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Statistical Analysis</title>' +
+    '<style>' + document.querySelector('style').textContent + '</style></head><body style="background:#1e1e1e;color:#d4d4d4;padding:20px">' +
+    '<h1>Statistical Analysis Results</h1>' + htmlContent + '</body></html>';
+  const blob = new Blob([fullHtml], {type:'text/html'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'statistical_analysis.html'; a.click();
+
+  // Export Excel
+  const results = window._results;
+  const wb = XLSX.utils.book_new();
+
+  function addSheet(name, rows) {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  }
+
+  const d1 = results.descriptive1, d2 = results.descriptive2;
+  addSheet('Descriptive', [
+    ['Statistic', d1.name, d2.name],
+    ['N', d1.n, d2.n], ['Mean', d1.mean, d2.mean], ['Median', d1.median, d2.median],
+    ['Std Dev', d1.std, d2.std], ['Variance', d1.variance, d2.variance],
+    ['Min', d1.min, d2.min], ['Max', d1.max, d2.max],
+    ['Q1', d1.q1, d2.q1], ['Q3', d1.q3, d2.q3], ['IQR', d1.iqr, d2.iqr],
+    ['Skewness', d1.skewness, d2.skewness], ['Kurtosis', d1.kurtosis, d2.kurtosis],
+  ]);
+
+  const p = results.pearson, s = results.spearman;
+  addSheet('Correlations', [
+    ['Measure', 'Value'],
+    ['Pearson r', p.r], ['Pearson r²', p.r2], ['Pearson p', p.p_value],
+    ['Pearson 95% CI Lower', p.ci_95_lower], ['Pearson 95% CI Upper', p.ci_95_upper],
+    ['Spearman ρ', s.rho], ['Spearman p', s.p_value],
+  ]);
+
+  const reg = results.regression_2on1;
+  addSheet('Regression', [
+    ['Measure', 'Value'],
+    ['Equation', reg.equation], ['R²', reg.r2], ['Adj R²', reg.r2_adj],
+    ['F', reg.f_statistic], ['F p', reg.f_pvalue],
+    ['Intercept', reg.intercept], ['Slope', reg.slope],
+    ['Slope SE', reg.slope_se], ['Slope p', reg.slope_p],
+    ['MSE', reg.mse], ['N', reg.n],
+  ]);
+
+  const ind = results.independent_ttest;
+  addSheet('t-Tests', [
+    ['Measure', 'Student', 'Welch'],
+    ['t', ind.student_t, ind.welch_t],
+    ['df', ind.student_df, '~'+ind.student_df],
+    ['p', ind.student_pvalue, ind.welch_pvalue],
+    ['Significant', ind.student_significant?'Yes':'No', ind.welch_significant?'Yes':'No'],
+    ['Levene F', ind.levene_statistic, ''],
+    ['Levene p', ind.levene_pvalue, ''],
+    ['Mean diff', ind.mean_difference, ''],
+    ["Cohen's d", ind.cohens_d, ''],
+  ]);
+
+  XLSX.writeFile(wb, 'statistical_analysis.xlsx');
+}
+
+// ═══════════════════════════════════════════
+// RESIZER
+// ═══════════════════════════════════════════
+(function() {
+  const resizer = document.getElementById('resizer');
+  const left = document.getElementById('left');
+  let startX, startW;
+  resizer.addEventListener('mousedown', e => {
+    startX = e.clientX; startW = left.offsetWidth;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', () => document.removeEventListener('mousemove', onMove), {once: true});
+  });
+  function onMove(e) { left.style.width = Math.max(250, Math.min(800, startW + e.clientX - startX)) + 'px'; }
+})();
+
+// Initialize
+refreshUI();
+</script>
+</body>
+</html>
