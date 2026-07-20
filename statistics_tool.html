@@ -430,7 +430,18 @@ function getData(num) {
 function clearData(num) { document.getElementById('data'+num).value = ''; document.getElementById('count'+num).textContent = '0 values'; }
 
 function pasteData(num) {
-  navigator.clipboard.readText().then(t => { document.getElementById('data'+num).value = t; getData(num); }).catch(() => alert('Cannot access clipboard'));
+  // Try clipboard API first (needs HTTPS/localhost), fall back to prompt
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(t => {
+      document.getElementById('data'+num).value = t; getData(num);
+    }).catch(() => promptPaste(num));
+  } else {
+    promptPaste(num);
+  }
+}
+function promptPaste(num) {
+  const text = prompt('Paste data (numbers separated by spaces, tabs, commas, or newlines):');
+  if (text) { document.getElementById('data'+num).value = text; getData(num); }
 }
 
 function importFile(num) {
