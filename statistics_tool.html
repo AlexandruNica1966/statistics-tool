@@ -69,7 +69,7 @@ button { cursor: pointer; font-family: inherit; }
 .commentary-title { font-size: 13px; font-weight: bold; color: var(--yellow); padding: 8px 4px 2px 4px; }
 .sig { color: var(--teal); font-weight: bold; }
 .not-sig { color: var(--orange); font-weight: bold; }
-.chart-container { width: 100%; margin: 12px 0; }
+.chart-container { width: 100%; min-height: 380px; margin: 12px 0; }
 .eq { font-size: 13px; color: var(--yellow); padding: 4px; font-family: monospace; }
 .note { color: #888; font-size: 11px; padding: 8px 4px; }
 /* ── Status bar ── */
@@ -474,7 +474,8 @@ function descriptiveStats(data, name) {
   const n = data.length;
   const mean = jStat.mean(data);
   const median = jStat.median(data);
-  const mode = jStat.mode(data);
+  const modeRaw = jStat.mode(data);
+  const mode = Array.isArray(modeRaw) ? modeRaw[0] : modeRaw;
   const stdev = jStat.stdev(data, true);
   const variance = jStat.variance(data, true);
   const sem = stdev / Math.sqrt(n);
@@ -881,6 +882,7 @@ function renderCorrelations(r) {
   const pCls = p.significant ? 'sig' : 'not-sig';
   h += makeTable([
     [tr('corr_r'), p.r.toFixed(6)],
+    [tr('corr_rho'), p.r.toFixed(6)],
     [tr('corr_r2'), p.r2.toFixed(6)],
     [tr('corr_pvalue'), fmtP(p.p_value)],
     [tr('corr_ci'), '['+p.ci_95_lower.toFixed(4)+', '+p.ci_95_upper.toFixed(4)+']'],
@@ -1060,24 +1062,33 @@ function renderCharts(r, d1, d2, n1, n2) {
 
   c.innerHTML = '<div class="chart-container" id="chart-hist"></div><div class="chart-container" id="chart-box"></div><div class="chart-container" id="chart-scatter"></div><div class="chart-container" id="chart-qq"></div><div class="chart-container" id="chart-resid"></div>';
 
-  const darkLayout = { template: 'plotly_dark', paper_bgcolor: '#1e1e1e', plot_bgcolor: '#252526', margin: { t: 40, b: 40, l: 50, r: 20 } };
+  // Shared axis font styling for contrast
+  const axFont = { title: { font: { color: '#ffffff', size: 13 } }, tickfont: { color: '#d0d0d0', size: 12 }, gridcolor: '#555' };
+  const baseLayout = { template: 'plotly_dark', paper_bgcolor: '#1e1e1e', plot_bgcolor: '#252526', margin: { t: 40, b: 40, l: 50, r: 20 },
+    font: { color: '#e0e0e0', size: 13 },
+    title: { font: { color: '#ffffff', size: 15 } },
+    legend: { font: { color: '#e0e0e0', size: 12 } } };
+
+  function mkLayout(title, xTitle, yTitle, extra) {
+    return { ...baseLayout, title, xaxis: { ...axFont, title: xTitle }, yaxis: { ...axFont, title: yTitle }, ...(extra||{}) };
+  }
 
   // Histograms with KDE-like density
   const nbins = Math.max(5, Math.ceil(Math.sqrt(Math.max(d1.length, d2.length))));
   const hTrace1 = { x: d1, type: 'histogram', name: n1, opacity: 0.6, marker: { color: '#569cd6' }, histnorm: 'probability density', nbinsx: nbins };
   const hTrace2 = { x: d2, type: 'histogram', name: n2, opacity: 0.6, marker: { color: '#ce9178' }, histnorm: 'probability density', nbinsx: nbins };
-  Plotly.newPlot('chart-hist', [hTrace1, hTrace2], { ...darkLayout, title: tr('chart_hist_title'), xaxis: { title: 'Value' }, yaxis: { title: 'Density' } }, { responsive: true });
+  Plotly.newPlot('chart-hist', [hTrace1, hTrace2], mkLayout(tr('chart_hist_title'), 'Value', 'Density'), { responsive: true });
 
   // Box plots
   const bTrace1 = { y: d1, type: 'box', name: n1, marker: { color: '#569cd6' } };
   const bTrace2 = { y: d2, type: 'box', name: n2, marker: { color: '#ce9178' } };
-  Plotly.newPlot('chart-box', [bTrace1, bTrace2], { ...darkLayout, title: tr('chart_box_title') }, { responsive: true });
+  Plotly.newPlot('chart-box', [bTrace1, bTrace2], mkLayout(tr('chart_box_title'), '', 'Value'), { responsive: true });
 
   // Scatter + regression line
   const xRange = [Math.min(...d1.slice(0,n)), Math.max(...d1.slice(0,n))];
   const regLine = { x: xRange, y: xRange.map(xv => reg.intercept + reg.slope * xv), mode: 'lines', name: reg.equation, line: { color: '#ce9178', width: 2 } };
   const scTrace = { x: d1.slice(0,n), y: d2.slice(0,n), mode: 'markers', type: 'scatter', name: 'Data', marker: { color: '#569cd6', size: 6 } };
-  Plotly.newPlot('chart-scatter', [scTrace, regLine], { ...darkLayout, title: tr('chart_scatter_title')+' (r='+r.pearson.r.toFixed(4)+')', xaxis: { title: n1 }, yaxis: { title: n2 } }, { responsive: true });
+  Plotly.newPlot('chart-scatter', [scTrace, regLine], mkLayout(tr('chart_scatter_title')+' (r='+r.pearson.r.toFixed(4)+')', n1, n2), { responsive: true });
 
   // Q-Q plots (side by side via overlay)
   function qqData(data) {
@@ -1089,11 +1100,11 @@ function renderCharts(r, d1, d2, n1, n2) {
   const qq1 = qqData(d1), qq2 = qqData(d2);
   const qqTrace1 = { x: qq1.theo, y: qq1.sample, mode: 'markers', type: 'scatter', name: n1, marker: { color: '#569cd6', size: 4 } };
   const qqTrace2 = { x: qq2.theo, y: qq2.sample, mode: 'markers', type: 'scatter', name: n2, marker: { color: '#ce9178', size: 4 } };
-  Plotly.newPlot('chart-qq', [qqTrace1, qqTrace2], { ...darkLayout, title: tr('chart_qq_title'), xaxis: { title: 'Theoretical' }, yaxis: { title: 'Sample' } }, { responsive: true });
+  Plotly.newPlot('chart-qq', [qqTrace1, qqTrace2], mkLayout(tr('chart_qq_title'), 'Theoretical Quantiles', 'Sample Quantiles'), { responsive: true });
 
   // Residuals vs Fitted
   const residTrace = { x: reg.predictions, y: reg.residuals, mode: 'markers', type: 'scatter', name: 'Residuals', marker: { color: '#569cd6', size: 5 } };
-  Plotly.newPlot('chart-resid', [residTrace], { ...darkLayout, title: tr('chart_resid_title'), xaxis: { title: 'Fitted Values' }, yaxis: { title: 'Residuals' }, shapes: [{ type: 'line', x0: Math.min(...reg.predictions), x1: Math.max(...reg.predictions), y0: 0, y1: 0, line: { color: '#ce9178', dash: 'dash' } }] }, { responsive: true });
+  Plotly.newPlot('chart-resid', [residTrace], mkLayout(tr('chart_resid_title'), 'Fitted Values', 'Residuals', { shapes: [{ type: 'line', x0: Math.min(...reg.predictions), x1: Math.max(...reg.predictions), y0: 0, y1: 0, line: { color: '#ce9178', dash: 'dash' } }] }), { responsive: true });
 }
 
 // ═══════════════════════════════════════════════════════════════
