@@ -225,7 +225,8 @@ const S = {
   corr_spearman_title:{en:"Spearman Rank Correlation (ρ)", ro:"Corelația Spearman (ρ)"},
   corr_col_measure:   {en:"Measure", ro:"Măsură"},
   corr_col_value:     {en:"Value", ro:"Valoare"},
-  corr_r:             {en:"r (correlation coefficient)", ro:"r (coeficient de corelație)"},
+  corr_r:             {en:"r (sample correlation)", ro:"r (corelația eșantionului)"},
+  corr_pop_rho:       {en:"ρ (population correlation estimate)", ro:"ρ (estimare corelație populațională)"},
   corr_r2:            {en:"r² (coefficient of determination)", ro:"r² (coeficient de determinare)"},
   corr_pvalue:        {en:"p-value", ro:"valoarea p"},
   corr_ci:            {en:"95% CI for r", ro:"IC 95% pentru r"},
@@ -318,10 +319,13 @@ const S = {
   comment_kurt_meso:{en:"Kurtosis near 0 indicates mesokurtic (normal-like) tails.", ro:"Curtosis aproape de 0 indică cozi mezokurtice (asemănătoare normalei)."},
   comment_kurt_heavy:{en:"Positive kurtosis indicates heavier tails than normal — possible outliers.", ro:"Curtosis pozitiv indică cozi mai groase decât normala — posibile valori aberante."},
   comment_kurt_light:{en:"Negative kurtosis indicates lighter tails than normal — distribution is more concentrated around the mean.", ro:"Curtosis negativ indică cozi mai subțiri decât normala — distribuția este mai concentrată în jurul mediei."},
+  comment_desc_extra:{en:"Dataset 1 has {n1} values with 95% CI for mean: {ci1}. Dataset 2 has {n2} values with 95% CI: {ci2}. SEM (Standard Error of the Mean) tells you how precise your mean estimate is — smaller SEM = more precise. Skewness ≠ 0 means asymmetry; kurtosis ≠ 0 means heavier/lighter tails than normal.", ro:"Setul 1 are {n1} valori cu IC 95% pentru medie: {ci1}. Setul 2 are {n2} valori cu IC 95%: {ci2}. ESM (Eroarea Standard a Mediei) îți spune cât de precisă este estimarea mediei — ESM mai mic = mai precis. Asimetria ≠ 0 înseamnă asimetrie; curtoza ≠ 0 înseamnă cozi mai groase/subțiri decât normala."},
   comment_corr_pearson:{en:"Pearson r = {r} ({strength} {direction} correlation). The variables share {pct}% of their variance (r² = {r2}).", ro:"Pearson r = {r} (corelație {strength} {direction}). Variabilele împart {pct}% din varianță (r² = {r2})."},
   comment_corr_significant:{en:"The correlation is statistically significant ({p}), meaning the relationship is unlikely due to chance.", ro:"Corelația este semnificativă statistic ({p}), ceea ce înseamnă că relația nu este probabil întâmplătoare."},
   comment_corr_not_significant:{en:"The correlation is not statistically significant ({p}), so we cannot rule out chance as an explanation.", ro:"Corelația nu este semnificativă statistic ({p}), deci nu putem exclude întâmplarea ca explicație."},
   comment_corr_spearman:{en:"Spearman ρ = {rho} ({strength} {direction} rank correlation). This is a non-parametric alternative that uses ranks rather than raw values.", ro:"Spearman ρ = {rho} (corelație de rang {strength} {direction}). Aceasta este o alternativă non-parametrică care folosește ranguri în loc de valorile brute."},
+  comment_corr_pop_rho:{en:"The population correlation ρ is estimated by r = {rho}. With 95% confidence, the true population correlation lies in [{ci}].", ro:"Corelația populațională ρ este estimată prin r = {rho}. Cu 95% încredere, corelația reală din populație se află în [{ci}]."},
+  comment_corr_compare:{en:"Pearson measures linear relationships (sensitive to outliers). Spearman measures monotonic relationships (robust to outliers). If Spearman ρ differs substantially from Pearson r, your data may have outliers or a non-linear pattern.", ro:"Pearson măsoară relații liniare (sensibil la valori aberante). Spearman măsoară relații monotonice (robust la valori aberante). Dacă Spearman ρ diferă substanțial de Pearson r, datele pot avea valori aberante sau un pattern non-liniar."},
   comment_reg_intro:{en:"The model explains {pct}% of the variance in {y} (R² = {r2}).", ro:"Modelul explică {pct}% din varianța variabilei {y} (R² = {r2})."},
   comment_reg_slope:{en:"For each 1-unit increase in {x}, {y} changes by {slope} on average.", ro:"Pentru fiecare creștere cu 1 unitate a variabilei {x}, {y} se modifică în medie cu {slope}."},
   comment_reg_sig:  {en:"The model is statistically significant — the slope is unlikely to be zero.", ro:"Modelul este semnificativ statistic — panta nu este probabil zero."},
@@ -871,6 +875,9 @@ function renderDescriptive(r, n1, n2) {
   else if (avgKurt > 0) h += makeCommentary(tr('comment_kurt_heavy'));
   else h += makeCommentary(tr('comment_kurt_light'));
 
+  // Extra interpretation
+  h += makeCommentary(tr('comment_desc_extra', {n1:d1.n, n2:d2.n, ci1:'['+d1.ci_95_lower.toFixed(2)+', '+d1.ci_95_upper.toFixed(2)+']', ci2:'['+d2.ci_95_lower.toFixed(2)+', '+d2.ci_95_upper.toFixed(2)+']'}));
+
   c.innerHTML = h;
 }
 
@@ -878,11 +885,14 @@ function renderDescriptive(r, n1, n2) {
 function renderCorrelations(r) {
   const c = document.getElementById('result-content');
   const p = r.pearson, s = r.spearman;
-  let h = makeSection(tr('corr_pearson_title'));
+  let h = '';
+
+  // ═══ PEARSON r (sample) + ρ (population) ═══
+  h += makeSection(tr('corr_pearson_title'));
   const pCls = p.significant ? 'sig' : 'not-sig';
   h += makeTable([
     [tr('corr_r'), p.r.toFixed(6)],
-    [tr('corr_rho'), p.r.toFixed(6)],
+    [tr('corr_pop_rho'), p.r.toFixed(6)],
     [tr('corr_r2'), p.r2.toFixed(6)],
     [tr('corr_pvalue'), fmtP(p.p_value)],
     [tr('corr_ci'), '['+p.ci_95_lower.toFixed(4)+', '+p.ci_95_upper.toFixed(4)+']'],
@@ -893,9 +903,11 @@ function renderCorrelations(r) {
   h += '<div class="commentary-title">' + tr('commentary_title') + '</div>';
   const dir = p.r >= 0 ? tr('direction_positive') : tr('direction_negative');
   h += makeCommentary(tr('comment_corr_pearson', {r:p.r.toFixed(3), strength:strengthTr(p.strength), direction:dir, pct:(p.r2*100).toFixed(1), r2:p.r2.toFixed(3)}));
+  h += makeCommentary(tr('comment_corr_pop_rho', {rho:p.r.toFixed(3), ci: '['+p.ci_95_lower.toFixed(3)+', '+p.ci_95_upper.toFixed(3)+']'}));
   if (p.significant) h += makeCommentary(tr('comment_corr_significant', {p:fmtP(p.p_value)}));
   else h += makeCommentary(tr('comment_corr_not_significant', {p:fmtP(p.p_value)}));
 
+  // ═══ SPEARMAN ρ (rank correlation) ═══
   h += makeSection(tr('corr_spearman_title'));
   const sCls = s.significant ? 'sig' : 'not-sig';
   h += makeTable([
@@ -908,6 +920,7 @@ function renderCorrelations(r) {
 
   const sDir = s.rho >= 0 ? tr('direction_positive') : tr('direction_negative');
   h += makeCommentary(tr('comment_corr_spearman', {rho:s.rho.toFixed(3), strength:strengthTr(s.strength), direction:sDir}));
+  h += makeCommentary(tr('comment_corr_compare'));
   c.innerHTML = h;
 }
 
@@ -1073,11 +1086,35 @@ function renderCharts(r, d1, d2, n1, n2) {
     return { ...baseLayout, title, xaxis: { ...axFont, title: xTitle }, yaxis: { ...axFont, title: yTitle }, ...(extra||{}) };
   }
 
-  // Histograms with KDE-like density
+  // Histograms with KDE overlay
+  // Kernel Density Estimation (Gaussian kernel, Silverman's rule)
+  function kde(data, nPoints) {
+    nPoints = nPoints || 200;
+    const mean = jStat.mean(data), std = jStat.stdev(data, true);
+    const bw = 1.06 * std * Math.pow(data.length, -0.2); // Silverman's rule
+    const xMin = Math.min(...data) - 3*bw, xMax = Math.max(...data) + 3*bw;
+    const step = (xMax - xMin) / nPoints;
+    const xs = [], ys = [];
+    const invSqrt2Pi = 1 / Math.sqrt(2 * Math.PI);
+    for (let i = 0; i <= nPoints; i++) {
+      const x = xMin + i * step;
+      let density = 0;
+      for (let j = 0; j < data.length; j++) {
+        const z = (x - data[j]) / bw;
+        density += Math.exp(-0.5 * z * z);
+      }
+      density *= invSqrt2Pi / (data.length * bw);
+      xs.push(x); ys.push(density);
+    }
+    return { x: xs, y: ys };
+  }
+  const kde1 = kde(d1), kde2 = kde(d2);
   const nbins = Math.max(5, Math.ceil(Math.sqrt(Math.max(d1.length, d2.length))));
-  const hTrace1 = { x: d1, type: 'histogram', name: n1, opacity: 0.6, marker: { color: '#569cd6' }, histnorm: 'probability density', nbinsx: nbins };
-  const hTrace2 = { x: d2, type: 'histogram', name: n2, opacity: 0.6, marker: { color: '#ce9178' }, histnorm: 'probability density', nbinsx: nbins };
-  Plotly.newPlot('chart-hist', [hTrace1, hTrace2], mkLayout(tr('chart_hist_title'), 'Value', 'Density'), { responsive: true });
+  const hTrace1 = { x: d1, type: 'histogram', name: n1, opacity: 0.5, marker: { color: '#569cd6' }, histnorm: 'probability density', nbinsx: nbins, showlegend: true };
+  const hTrace2 = { x: d2, type: 'histogram', name: n2, opacity: 0.5, marker: { color: '#ce9178' }, histnorm: 'probability density', nbinsx: nbins, showlegend: true };
+  const kTrace1 = { x: kde1.x, y: kde1.y, mode: 'lines', name: n1+' KDE', line: { color: '#80bfff', width: 2.5 }, showlegend: true };
+  const kTrace2 = { x: kde2.x, y: kde2.y, mode: 'lines', name: n2+' KDE', line: { color: '#f0a080', width: 2.5 }, showlegend: true };
+  Plotly.newPlot('chart-hist', [hTrace1, kTrace1, hTrace2, kTrace2], mkLayout(tr('chart_hist_title'), 'Value', 'Density'), { responsive: true });
 
   // Box plots
   const bTrace1 = { y: d1, type: 'box', name: n1, marker: { color: '#569cd6' } };
